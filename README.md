@@ -1,124 +1,111 @@
-# Korean Lottery Number Generator
+# 로또 번호 생성기
 
-A Rust-based lottery number generator that analyzes historical Korean lottery data to generate new number combinations that exclude previous winning combinations.
+한국 로또 6/45의 역대 당첨번호를 바탕으로 중복되지 않는 새로운 번호 조합을 생성하는 Rust 프로그램입니다.
 
-## Features
+## 주요 기능
 
-- **Historical Data Analysis**: Parses lottery data from HTML files (static/1-600.xls, static/601-1186.xls)
-- **Smart Number Generation**: Generates 6-number combinations (1-45) that avoid:
-  - Previous 1st place winning combinations
-  - Previous 2nd place winning combinations (5 winning numbers + bonus)
-- **Interactive CLI**: User-friendly command-line interface with menu options
-- **ESC Key Support**: Press ESC during round input to return to main menu
-- **Data Persistence**: Automatically saves and loads lottery data from `lottery_data.txt`
-- **New Round Entry**: Add new lottery rounds with date, winning numbers, and bonus number
+- **중복 방지**: 1등 및 2등 당첨번호와 중복되지 않는 번호 조합 생성
+- **엑셀 파일 파싱**: 기존 로또 당첨번호 데이터를 엑셀 파일에서 자동 파싱
+- **데이터 관리**: 텍스트 파일 형태로 당첨번호 데이터 저장 및 로드
+- **신규 회차 추가**: 새로운 회차의 당첨번호를 수동으로 추가 가능
 
-## Installation
-
-### Prerequisites
-- Rust (latest stable version)
-- Cargo package manager
-
-### Build from source
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd lottery
-```
-
-2. Build the project:
-```bash
-cargo build --release
-```
-
-3. Run the application:
-```bash
-cargo run
-```
-
-## Usage
-
-The application provides an interactive menu with three main options:
-
-### 1. Generate New Lottery Numbers
-- Generates 6 unique numbers between 1-45
-- Excludes all previous 1st place winning combinations
-- Excludes all previous 2nd place winning combinations
-- Displays recommended numbers for play
-
-### 2. Add New Drawing Round
-- Enter round number (with ESC support to return to main menu)
-- Enter drawing date (format: YYYY.MM.DD)
-- Enter 6 winning numbers (space-separated)
-- Enter bonus number
-- Automatically saves to data file
-
-### 3. Exit Program
-- Safely exits the application
-
-## Data Format
-
-The application works with lottery data in the following format:
-- **Round**: Sequential drawing number
-- **Date**: Drawing date (YYYY.MM.DD format)
-- **Winning Numbers**: 6 numbers between 1-45
-- **Bonus Number**: Single bonus number between 1-45
-
-## File Structure
+## 프로젝트 구조
 
 ```
 lottery/
 ├── src/
-│   └── main.rs              # Main application code
+│   └── main.rs          # 메인 프로그램 소스 코드
 ├── static/
-│   ├── 1-600.xls           # Historical lottery data (rounds 1-600)
-│   └── 601-1186.xls        # Historical lottery data (rounds 601-1186)
-├── lottery_data.txt         # Processed lottery data (auto-generated)
-├── Cargo.toml              # Rust project configuration
-└── README.md               # This file
+│   ├── 1-600.xls        # 1~600회차 당첨번호 데이터
+│   └── 601-1187.xls     # 601~1187회차 당첨번호 데이터
+├── lottery_data.txt     # 파싱된 당첨번호 텍스트 데이터
+├── Cargo.toml           # 프로젝트 설정 및 의존성
+└── README.md            # 프로젝트 문서
 ```
 
-## Dependencies
+## 설치 및 실행
 
-- `scraper` - HTML parsing for legacy data files
-- `serde` - Serialization/deserialization
-- `rand` - Random number generation
-- `encoding_rs` - EUC-KR encoding support for Korean HTML files
-- `crossterm` - Terminal input/output and keyboard event handling
+### 필요 조건
 
-## Technical Details
+- Rust 1.70.0 이상
+- Cargo (Rust 패키지 매니저)
 
-### Data Processing
-- Parses HTML files with EUC-KR encoding
-- Extracts lottery drawing information from table structures
-- Validates number ranges (1-45 for lottery numbers)
-- Sorts and stores data chronologically
+### 의존성
 
-### Number Generation Algorithm
-- Uses cryptographically secure random number generation
-- Maintains a HashSet of used combinations for O(1) lookup
-- Generates combinations until a unique one is found
-- Excludes both 1st place (6 numbers) and 2nd place (5 numbers + bonus) combinations
+- `scraper`: HTML/엑셀 파일 파싱
+- `serde`: 데이터 직렬화/역직렬화
+- `rand`: 난수 생성
+- `encoding_rs`: EUC-KR 인코딩 지원
 
-### User Interface
-- Raw terminal mode for ESC key detection
-- Real-time input feedback
-- Clear menu navigation
-- Error handling with user-friendly messages
+### 실행 방법
 
-## Contributing
+```bash
+# 프로젝트 클론
+git clone <repository-url>
+cd lottery
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+# 빌드 및 실행
+cargo run
+```
 
-## License
+## 사용법
 
-This project is open source and available under the MIT License.
+프로그램을 실행하면 다음 메뉴가 표시됩니다:
 
-## Disclaimer
+```
+=== 로또 번호 추첨기 ===
+1. 새로운 로또 번호 추첨
+2. 신규 회차 추가
+3. 종료
+```
 
-This tool is for entertainment purposes only. Lottery numbers are random, and this generator does not guarantee winning outcomes. Please gamble responsibly.
+### 1. 새로운 로또 번호 추첨
+
+기존 1등 및 2등 당첨번호와 중복되지 않는 6개의 번호를 자동으로 생성합니다.
+
+### 2. 신규 회차 추가
+
+새로운 회차의 당첨번호를 수동으로 추가할 수 있습니다:
+- 회차 번호 입력
+- 1등 번호 6개 입력 (공백으로 구분)
+- 보너스 번호 입력
+
+### 3. 종료
+
+프로그램을 종료합니다.
+
+## 데이터 구조
+
+### LotteryDrawing
+
+```rust
+struct LotteryDrawing {
+    round: u32,      // 회차 번호
+    numbers: [u8; 6], // 당첨번호 6개 (1-45)
+    bonus: u8,       // 보너스번호 (1-45)
+}
+```
+
+### 텍스트 파일 형식
+
+```
+회차,당첨번호1,당첨번호2,당첨번호3,당첨번호4,당첨번호5,당첨번호6,보너스번호
+1,10,23,29,33,37,40,16
+2,9,13,21,25,32,42,2
+...
+```
+
+## 알고리즘
+
+1. **1등 중복 제거**: 기존 1등 당첨번호 조합을 HashSet에 저장
+2. **2등 중복 제거**: 1등 번호 중 하나를 보너스 번호로 교체한 조합도 제외
+3. **랜덤 생성**: 1-45 범위에서 6개 번호를 무작위로 선택
+4. **중복 검사**: 생성된 조합이 기존 당첨번호와 중복되지 않을 때까지 반복
+
+## 라이선스
+
+MIT License
+
+## 기여
+
+버그 리포트나 기능 제안은 Issues를 통해 제출해주세요.

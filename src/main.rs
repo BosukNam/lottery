@@ -1,22 +1,16 @@
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fs::File;
+use std::fs::{File, read_dir};
 use std::io::{Read, Write};
 use std::path::Path;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use encoding_rs::EUC_KR;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode},
-};
-use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LotteryDrawing {
     round: u32,
-    date: String,
     numbers: [u8; 6],  // 당첨번호 6개
     bonus: u8,         // 보너스번호
 }
@@ -32,8 +26,8 @@ impl LotteryParser {
         }
     }
 
-    fn parse_html_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("HTML 파일 파싱 중: {}", file_path);
+    fn parse_excel_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        println!("엑셀 파일 파싱 중: {}", file_path);
         
         let mut file = File::open(file_path)?;
         let mut buffer = Vec::new();
@@ -70,13 +64,6 @@ impl LotteryParser {
                 }
                 
                 if let Some(round) = round_opt {
-                    // 날짜는 회차 다음 셀
-                    let date_index = round_index + 1;
-                    if date_index >= cells.len() {
-                        continue;
-                    }
-                    let date = cells[date_index].clone();
-                    
                     // 당첨번호를 찾기 - 맨 뒤에서부터 7개 셀에서 찾기
                     let start_index = if cells.len() >= 7 { cells.len() - 7 } else { 0 };
                     
@@ -102,7 +89,6 @@ impl LotteryParser {
                     if valid_count == 7 && bonus > 0 {
                         let drawing = LotteryDrawing {
                             round,
-                            date,
                             numbers,
                             bonus,
                         };
@@ -120,7 +106,7 @@ impl LotteryParser {
         let mut file = File::create(file_path)?;
         
         // 헤더 작성
-        writeln!(file, "회차,날짜,당첨번호1,당첨번호2,당첨번호3,당첨번호4,당첨번호5,당첨번호6,보너스번호")?;
+        writeln!(file, "회차,당첨번호1,당첨번호2,당첨번호3,당첨번호4,당첨번호5,당첨번호6,보너스번호")?;
         
         // 데이터 작성 (회차 순으로 정렬)
         let mut sorted_drawings = self.drawings.clone();
@@ -129,9 +115,8 @@ impl LotteryParser {
         for drawing in sorted_drawings {
             writeln!(
                 file,
-                "{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{}",
                 drawing.round,
-                drawing.date,
                 drawing.numbers[0],
                 drawing.numbers[1],
                 drawing.numbers[2],
@@ -147,9 +132,10 @@ impl LotteryParser {
         Ok(())
     }
 
-    fn load_from_text_file(&mut self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    fn load_from_text_file(&mut self, file_path: &str) -> Result<bool, Box<dyn std::error::Error>> {
         if !Path::new(file_path).exists() {
-            return Ok(());
+            println!("텍스트 파일이 존재하지 않습니다: {}", file_path);
+            return Ok(false);
         }
         
         let mut file = File::open(file_path)?;
@@ -162,20 +148,19 @@ impl LotteryParser {
             if line_num == 0 { continue; } // 헤더 스킵
             
             let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() >= 9 {
+            if parts.len() >= 8 {
                 if let (Ok(round), Ok(n1), Ok(n2), Ok(n3), Ok(n4), Ok(n5), Ok(n6), Ok(bonus)) = (
                     parts[0].parse::<u32>(),
+                    parts[1].parse::<u8>(),
                     parts[2].parse::<u8>(),
                     parts[3].parse::<u8>(),
                     parts[4].parse::<u8>(),
                     parts[5].parse::<u8>(),
                     parts[6].parse::<u8>(),
                     parts[7].parse::<u8>(),
-                    parts[8].parse::<u8>(),
                 ) {
                     let drawing = LotteryDrawing {
                         round,
-                        date: parts[1].to_string(),
                         numbers: [n1, n2, n3, n4, n5, n6],
                         bonus,
                     };
@@ -185,7 +170,7 @@ impl LotteryParser {
         }
         
         println!("텍스트 파일에서 {}개 회차 로드됨", self.drawings.len());
-        Ok(())
+        Ok(true)
     }
 
     fn generate_new_numbers(&self) -> [u8; 6] {
@@ -223,77 +208,53 @@ impl LotteryParser {
         }
     }
 
-    fn add_new_drawing(&mut self, round: u32, date: String, numbers: [u8; 6], bonus: u8) {
+    fn add_new_drawing(&mut self, round: u32, numbers: [u8; 6], bonus: u8) {
         let drawing = LotteryDrawing {
             round,
-            date,
             numbers,
             bonus,
         };
         self.drawings.push(drawing);
         self.drawings.sort_by_key(|d| d.round);
     }
-}
 
-fn read_line_with_escape() -> Result<Option<String>, Box<dyn std::error::Error>> {
-    enable_raw_mode()?;
-    let mut input = String::new();
-    
-    loop {
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, kind: KeyEventKind::Press, .. }) = event::read()? {
-                match code {
-                    KeyCode::Esc => {
-                        disable_raw_mode()?;
-                        println!("\n메인 메뉴로 돌아갑니다.");
-                        return Ok(None);
+    fn parse_all_excel_files(&mut self, static_dir: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let entries = read_dir(static_dir)?;
+        
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            
+            if let Some(extension) = path.extension() {
+                if extension == "xls" || extension == "xlsx" {
+                    if let Some(path_str) = path.to_str() {
+                        self.parse_excel_file(path_str)?;
                     }
-                    KeyCode::Enter => {
-                        disable_raw_mode()?;
-                        println!();
-                        return Ok(Some(input));
-                    }
-                    KeyCode::Backspace => {
-                        if !input.is_empty() {
-                            input.pop();
-                            print!("\r회차 (ESC: 메인메뉴): {}", input);
-                            std::io::stdout().flush()?;
-                        }
-                    }
-                    KeyCode::Char(c) => {
-                        input.push(c);
-                        print!("\r회차 (ESC: 메인메뉴): {}", input);
-                        std::io::stdout().flush()?;
-                    }
-                    _ => {}
                 }
             }
         }
+        
+        Ok(())
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parser = LotteryParser::new();
     
-    // lottery_data.txt 파일이 이미 존재하는지 확인
-    if Path::new("lottery_data.txt").exists() {
-        // 기존 데이터 로드
-        parser.load_from_text_file("lottery_data.txt")?;
-        println!("기존 데이터 파일을 로드했습니다 ({} 회차)", parser.drawings.len());
+    // 기존 데이터가 있는지 확인하고 로드
+    let data_exists = parser.load_from_text_file("lottery_data.txt")?;
+    
+    // lottery_data.txt가 없거나 비어있을 때만 엑셀 파일들을 파싱
+    if !data_exists || parser.drawings.is_empty() {
+        println!("기존 데이터가 없어 엑셀 파일을 파싱합니다.");
+        parser.parse_all_excel_files("static")?;
+        
+        // 파싱한 데이터가 있으면 텍스트 파일로 저장
+        if !parser.drawings.is_empty() {
+            parser.save_to_text_file("lottery_data.txt")?;
+        }
     } else {
-        println!("데이터 파일이 없습니다. HTML 파일들을 파싱합니다...");
-        
-        // HTML 파일들 파싱
-        if Path::new("static/1-600.xls").exists() {
-            parser.parse_html_file("static/1-600.xls")?;
-        }
-        
-        if Path::new("static/601-1186.xls").exists() {
-            parser.parse_html_file("static/601-1186.xls")?;
-        }
-        
-        // 텍스트 파일로 저장
-        parser.save_to_text_file("lottery_data.txt")?;
+        println!("기존 데이터를 사용합니다.");
     }
     
     println!("\n=== 로또 번호 추첨기 ===");
@@ -315,25 +276,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("(기존 1등, 2등 당첨번호 제외)");
             }
             "2" => {
-                print!("회차 (ESC: 메인메뉴): ");
+                print!("회차: ");
                 std::io::stdout().flush()?;
-                
-                let round = match read_line_with_escape()? {
-                    Some(input) => match input.trim().parse::<u32>() {
-                        Ok(r) => r,
-                        Err(_) => {
-                            println!("올바른 숫자를 입력해주세요.");
-                            continue;
-                        }
-                    },
-                    None => continue,
-                };
-                
-                print!("날짜 (예: 2024.01.01): ");
-                std::io::stdout().flush()?;
-                let mut date_input = String::new();
-                std::io::stdin().read_line(&mut date_input)?;
-                let date = date_input.trim().to_string();
+                let mut round_input = String::new();
+                std::io::stdin().read_line(&mut round_input)?;
+                let round = round_input.trim().parse::<u32>()?;
                 
                 print!("1등 번호 6개 (공백으로 구분): ");
                 std::io::stdout().flush()?;
@@ -358,7 +305,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::io::stdin().read_line(&mut bonus_input)?;
                 let bonus = bonus_input.trim().parse::<u8>()?;
                 
-                parser.add_new_drawing(round, date, numbers, bonus);
+                parser.add_new_drawing(round, numbers, bonus);
                 parser.save_to_text_file("lottery_data.txt")?;
                 
                 println!("{}회차 데이터가 추가되었습니다.", round);
