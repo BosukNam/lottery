@@ -49,14 +49,12 @@ impl LotteryParser {
             if cells.len() >= 17 {
                 // 첫 번째 또는 두 번째 셀에서 회차 찾기
                 let mut round_opt: Option<u32> = None;
-                let mut round_index = 0;
-                
+
                 for i in 0..=1 {
                     if i < cells.len() {
                         if let Ok(round) = cells[i].parse::<u32>() {
                             if round > 0 && round <= 2000 {  // 합리적인 회차 범위
                                 round_opt = Some(round);
-                                round_index = i;
                                 break;
                             }
                         }
@@ -173,7 +171,7 @@ impl LotteryParser {
         Ok(true)
     }
 
-    fn generate_new_numbers(&self) -> [u8; 6] {
+    fn get_used_combinations(&self) -> HashSet<[u8; 6]> {
         let mut used_combinations = HashSet::new();
         
         // 기존 1등 번호 조합들을 HashSet에 저장
@@ -193,19 +191,114 @@ impl LotteryParser {
             }
         }
         
+        used_combinations
+    }
+
+
+
+    fn generate_numbers_sets_with_required(&self, required_numbers: &[u8], count: usize) -> Result<Vec<[u8; 6]>, String> {
+        if required_numbers.is_empty() || required_numbers.len() > 6 {
+            return Err("필수 번호는 1-6개 사이여야 합니다.".to_string());
+        }
+
+        for &num in required_numbers {
+            if num < 1 || num > 45 {
+                return Err("번호는 1-45 사이여야 합니다.".to_string());
+            }
+        }
+
+        // 중복 체크
+        let mut unique_check = HashSet::new();
+        for &num in required_numbers {
+            if !unique_check.insert(num) {
+                return Err("중복된 번호가 있습니다.".to_string());
+            }
+        }
+
+        let used_combinations = self.get_used_combinations();
+        let mut rng = thread_rng();
+        let remaining_numbers: Vec<u8> = (1..=45)
+            .filter(|&n| !required_numbers.contains(&n))
+            .collect();
+
+        let needed_count = 6 - required_numbers.len();
+        let mut results = Vec::new();
+        let mut attempts = 0;
+        let max_attempts = count * 1000;
+
+        while results.len() < count && attempts < max_attempts {
+            attempts += 1;
+            let mut selected = required_numbers.to_vec();
+            let additional: Vec<u8> = remaining_numbers
+                .choose_multiple(&mut rng, needed_count)
+                .cloned()
+                .collect();
+            selected.extend(additional);
+            selected.sort();
+
+            let selected_array: [u8; 6] = selected.try_into().unwrap();
+
+            if !used_combinations.contains(&selected_array) && !results.contains(&selected_array) {
+                results.push(selected_array);
+            }
+        }
+
+        if results.len() < count {
+            return Err(format!("조건에 맞는 번호 조합을 {}개 찾을 수 없습니다. ({}개만 생성됨)", count, results.len()));
+        }
+
+        Ok(results)
+    }
+
+    fn generate_numbers_sets(&self, count: usize) -> Vec<[u8; 6]> {
+        let used_combinations = self.get_used_combinations();
         let mut rng = thread_rng();
         let all_numbers: Vec<u8> = (1..=45).collect();
+        let mut results = Vec::new();
+        let mut attempts = 0;
+        let max_attempts = count * 1000;
         
-        loop {
+        while results.len() < count && attempts < max_attempts {
+            attempts += 1;
             let mut selected: Vec<u8> = all_numbers.choose_multiple(&mut rng, 6).cloned().collect();
             selected.sort();
             
             let selected_array: [u8; 6] = selected.try_into().unwrap();
             
-            if !used_combinations.contains(&selected_array) {
-                return selected_array;
+            if !used_combinations.contains(&selected_array) && !results.contains(&selected_array) {
+                results.push(selected_array);
             }
         }
+        
+        results
+    }
+
+    fn get_number_frequency(&self) -> Vec<(u8, usize)> {
+        let mut frequency = [0usize; 46]; // 인덱스 0은 사용하지 않고 1-45만 사용
+        
+        // 1등 번호 빈도 계산
+        for drawing in &self.drawings {
+            for &num in &drawing.numbers {
+                if num >= 1 && num <= 45 {
+                    frequency[num as usize] += 1;
+                }
+            }
+        }
+        
+        // 보너스 번호도 2등에 영향을 주므로 포함
+        for drawing in &self.drawings {
+            if drawing.bonus >= 1 && drawing.bonus <= 45 {
+                frequency[drawing.bonus as usize] += 1;
+            }
+        }
+        
+        // (번호, 빈도) 쌍으로 변환하고 빈도 기준 오름차순 정렬
+        let mut freq_pairs: Vec<(u8, usize)> = (1..=45)
+            .map(|num| (num, frequency[num as usize]))
+            .collect();
+        
+        freq_pairs.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+        freq_pairs
     }
 
     fn add_new_drawing(&mut self, round: u32, numbers: [u8; 6], bonus: u8) {
@@ -216,6 +309,16 @@ impl LotteryParser {
         };
         self.drawings.push(drawing);
         self.drawings.sort_by_key(|d| d.round);
+    }
+
+    fn get_round_range(&self) -> Option<(u32, u32)> {
+        if self.drawings.is_empty() {
+            return None;
+        }
+
+        let min_round = self.drawings.iter().map(|d| d.round).min().unwrap();
+        let max_round = self.drawings.iter().map(|d| d.round).max().unwrap();
+        Some((min_round, max_round))
     }
 
     fn parse_all_excel_files(&mut self, static_dir: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -238,6 +341,30 @@ impl LotteryParser {
     }
 }
 
+fn get_number_input(prompt: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    print!("{}", prompt);
+    std::io::stdout().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    let numbers: Result<Vec<u8>, _> = input
+        .trim()
+        .split_whitespace()
+        .map(|s| s.parse::<u8>())
+        .collect();
+
+    Ok(numbers?)
+}
+
+fn show_menu() {
+    println!("\n=== 로또 번호 추첨기 ===");
+    println!("1. 새로운 로또 번호 추첨 (5개 세트)");
+    println!("2. 특정 수 포함 번호 추첨 (반자동, 5개 세트)");
+    println!("3. 수 추천 (빈도 기반)");
+    println!("4. 신규 회차 추가");
+    println!("5. 종료");
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parser = LotteryParser::new();
     
@@ -257,31 +384,105 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("기존 데이터를 사용합니다.");
     }
     
-    println!("\n=== 로또 번호 추첨기 ===");
-    println!("1. 새로운 로또 번호 추첨");
-    println!("2. 신규 회차 추가");
-    println!("3. 종료");
+    show_menu();
     
     loop {
-        print!("\n선택하세요 (1-3): ");
+        print!("\n선택하세요 (1-5): ");
         std::io::stdout().flush()?;
-        
+
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        
+        match std::io::stdin().read_line(&mut input) {
+            Ok(0) => {
+                println!("\n프로그램을 종료합니다.");
+                break;
+            }
+            Ok(_) => {},
+            Err(_) => {
+                println!("\n입력 오류가 발생했습니다. 프로그램을 종료합니다.");
+                break;
+            }
+        }
+
         match input.trim() {
             "1" => {
-                let new_numbers = parser.generate_new_numbers();
-                println!("\n추천 로또 번호: {:?}", new_numbers);
+                let number_sets = parser.generate_numbers_sets(5);
+                println!("\n=== 추천 로또 번호 5개 세트 ===");
+                for (i, numbers) in number_sets.iter().enumerate() {
+                    println!("{}: {:?}", i + 1, numbers);
+                }
                 println!("(기존 1등, 2등 당첨번호 제외)");
+                show_menu();
             }
             "2" => {
+                match get_number_input("포함할 번호들 (공백으로 구분): ") {
+                    Ok(required_numbers) => {
+                        match parser.generate_numbers_sets_with_required(&required_numbers, 5) {
+                            Ok(number_sets) => {
+                                println!("\n=== 특정 수 포함 추천 로또 번호 5개 세트 ===");
+                                for (i, numbers) in number_sets.iter().enumerate() {
+                                    println!("{}: {:?}", i + 1, numbers);
+                                }
+                                println!("포함된 수: {:?}", required_numbers);
+                                println!("(기존 1등, 2등 당첨번호 제외)");
+                            }
+                            Err(error) => {
+                                println!("오류: {}", error);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        println!("올바른 번호를 입력해주세요.");
+                    }
+                }
+                show_menu();
+            }
+            "3" => {
+                let frequency = parser.get_number_frequency();
+                println!("\n=== 빈도 기반 수 추천 ===");
+                println!("가장 낮은 빈도순으로 정렬:");
+
+                let mut current_index = 0;
+                loop {
+                    if current_index >= frequency.len() {
+                        println!("모든 수를 추천했습니다.");
+                        break;
+                    }
+
+                    let (number, freq) = frequency[current_index];
+                    println!("추천 수: {} (빈도: {}회)", number, freq);
+                    current_index += 1;
+
+                    print!("다음 수를 보시겠습니까? (Enter: 다음, q: 종료): ");
+                    std::io::stdout().flush()?;
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+
+                    if input.trim().to_lowercase() == "q" {
+                        break;
+                    }
+                }
+                show_menu();
+            }
+            "4" => {
+                println!("\n=== 신규 회차 추가 ===");
+
+                // 현재 저장된 회차 범위 표시
+                match parser.get_round_range() {
+                    Some((min_round, max_round)) => {
+                        println!("현재 저장된 회차: {}회 ~ {}회 (총 {}개)",
+                                min_round, max_round, parser.drawings.len());
+                    }
+                    None => {
+                        println!("현재 저장된 데이터가 없습니다.");
+                    }
+                }
+
                 print!("회차: ");
                 std::io::stdout().flush()?;
                 let mut round_input = String::new();
                 std::io::stdin().read_line(&mut round_input)?;
                 let round = round_input.trim().parse::<u32>()?;
-                
+
                 print!("1등 번호 6개 (공백으로 구분): ");
                 std::io::stdout().flush()?;
                 let mut numbers_input = String::new();
@@ -291,31 +492,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .split_whitespace()
                     .map(|s| s.parse().unwrap())
                     .collect();
-                
+
                 if number_parts.len() != 6 {
                     println!("6개의 번호를 입력해주세요.");
                     continue;
                 }
-                
+
                 let numbers: [u8; 6] = number_parts.try_into().unwrap();
-                
+
                 print!("보너스 번호: ");
                 std::io::stdout().flush()?;
                 let mut bonus_input = String::new();
                 std::io::stdin().read_line(&mut bonus_input)?;
                 let bonus = bonus_input.trim().parse::<u8>()?;
-                
+
                 parser.add_new_drawing(round, numbers, bonus);
                 parser.save_to_text_file("lottery_data.txt")?;
-                
+
                 println!("{}회차 데이터가 추가되었습니다.", round);
+
+                // 업데이트된 회차 범위 표시
+                if let Some((min_round, max_round)) = parser.get_round_range() {
+                    println!("업데이트된 회차: {}회 ~ {}회 (총 {}개)",
+                            min_round, max_round, parser.drawings.len());
+                }
+
+                show_menu();
             }
-            "3" => {
+            "5" => {
                 println!("프로그램을 종료합니다.");
                 break;
             }
             _ => {
-                println!("올바른 번호를 입력해주세요 (1-3).");
+                println!("올바른 번호를 입력해주세요 (1-5).");
+                show_menu();
             }
         }
     }
