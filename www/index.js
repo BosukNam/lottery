@@ -164,6 +164,71 @@ window.showFrequency = function() {
     }, 300);
 };
 
+// SHA-256 해시된 관리자 비밀번호 (단방향 암호화)
+const ADMIN_PASSWORD_HASH = "02d55d9dd12267248bfb93fa3a1ab0cdd867aa24d8f32cddd185cd4a869408bb";
+
+// SHA-256 해시 함수
+async function sha256Hash(str) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+// 비밀번호 확인 후 회차 추가 화면 표시
+window.showAddDrawingWithAuth = async function() {
+    const content = document.getElementById('content');
+
+    content.innerHTML = `
+        <div class="result-title">🔒 관리자 인증</div>
+        <div class="form-group">
+            <label class="form-label">비밀번호를 입력하세요</label>
+            <input type="password"
+                   id="admin-password"
+                   class="form-input"
+                   placeholder="비밀번호"
+                   autocomplete="off">
+        </div>
+        <button onclick="verifyPassword()" class="submit-btn">확인</button>
+        <div id="auth-result"></div>
+        <div class="note" style="margin-top: 20px;">※ 관리자만 신규 회차를 추가할 수 있습니다</div>
+    `;
+
+    // Enter 키로도 확인 가능
+    document.getElementById('admin-password').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            verifyPassword();
+        }
+    });
+};
+
+window.verifyPassword = async function() {
+    const passwordInput = document.getElementById('admin-password');
+    const password = passwordInput.value;
+    const resultDiv = document.getElementById('auth-result');
+
+    if (!password) {
+        resultDiv.innerHTML = '<div class="error-message">비밀번호를 입력해주세요.</div>';
+        return;
+    }
+
+    // 입력된 비밀번호를 SHA-256으로 해시하여 비교
+    const inputHash = await sha256Hash(password);
+
+    if (inputHash === ADMIN_PASSWORD_HASH) {
+        resultDiv.innerHTML = '<div class="success-message">인증 성공! 회차 추가 화면으로 이동합니다...</div>';
+        setTimeout(() => {
+            showAddDrawing();
+        }, 500);
+    } else {
+        resultDiv.innerHTML = '<div class="error-message">비밀번호가 올바르지 않습니다.</div>';
+        passwordInput.value = '';
+        passwordInput.focus();
+    }
+};
+
 window.showAddDrawing = function() {
     const content = document.getElementById('content');
     content.innerHTML = `

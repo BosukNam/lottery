@@ -5,7 +5,9 @@
       "Bash(timeout 10s cargo run)",
       "Bash(python3:*)",
       "Bash(chmod:*)",
-      "Bash(./build.sh:*)"
+      "Bash(./build.sh:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git add:*)"
     ]
   }
 }
