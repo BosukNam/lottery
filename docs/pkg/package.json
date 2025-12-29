@@ -1,0 +1,15 @@
+{
+  "name": "lottery",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "lottery_bg.wasm",
+    "lottery.js",
+    "lottery.d.ts"
+  ],
+  "main": "lottery.js",
+  "types": "lottery.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

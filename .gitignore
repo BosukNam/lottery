@@ -1,0 +1,9 @@
+/target
+/www/pkg
+**/*.rs.bk
+Cargo.lock
+.DS_Store
+convert_to_json.py
+
+# docs 폴더는 GitHub Pages용이므로 pkg 포함
+!/docs/pkg
