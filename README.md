@@ -1,6 +1,12 @@
 # 로또 번호 생성기
 
-한국 로또 6/45의 역대 당첨번호를 바탕으로 중복되지 않는 새로운 번호 조합을 생성하는 Rust 프로그램입니다.
+한국 로또 6/45의 역대 당첨번호를 바탕으로 중복되지 않는 새로운 번호 조합을 생성하는 프로그램입니다.
+
+## 🌐 웹 버전
+
+**바로 사용하기:** [https://bosuknam.github.io/lottery](https://bosuknam.github.io/lottery)
+
+웹 브라우저에서 바로 사용할 수 있습니다! (설치 불필요)
 
 ## 주요 기능
 
@@ -28,28 +34,45 @@ lottery/
 
 ## 설치 및 실행
 
-### 필요 조건
+### CLI 버전 (터미널)
 
+**필요 조건:**
 - Rust 1.70.0 이상
 - Cargo (Rust 패키지 매니저)
 
-### 의존성
-
-- `scraper`: HTML/엑셀 파일 파싱
-- `serde`: 데이터 직렬화/역직렬화
-- `rand`: 난수 생성
-- `encoding_rs`: EUC-KR 인코딩 지원
-
-### 실행 방법
-
+**실행 방법:**
 ```bash
 # 프로젝트 클론
-git clone <repository-url>
+git clone https://github.com/bosuknam/lottery.git
 cd lottery
 
 # 빌드 및 실행
 cargo run
 ```
+
+### 웹 버전 개발
+
+**필요 조건:**
+- Rust 1.70.0 이상
+- wasm-pack (`cargo install wasm-pack`)
+
+**빌드 방법:**
+```bash
+# WASM 빌드
+./build.sh
+
+# 로컬 테스트
+python3 -m http.server --directory www 8000
+# http://localhost:8000 접속
+```
+
+### 의존성
+
+- `serde`: 데이터 직렬화/역직렬화
+- `rand`: 난수 생성
+- `wasm-bindgen`: Rust ↔ JavaScript 바인딩
+- `scraper`: HTML/엑셀 파일 파싱 (CLI 전용)
+- `encoding_rs`: EUC-KR 인코딩 지원 (CLI 전용)
 
 ## 사용법
 

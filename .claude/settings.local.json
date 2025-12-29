@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo:*)",
+      "Bash(timeout 10s cargo run)",
+      "Bash(python3:*)",
+      "Bash(chmod:*)",
+      "Bash(./build.sh:*)"
+    ]
+  }
+}

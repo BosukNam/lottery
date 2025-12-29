@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로또 번호 생성기</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎰 로또 번호 생성기</h1>
+            <p class="subtitle">역대 당첨번호 기반 중복 없는 번호 추천</p>
+        </header>
+
+        <div class="info-card">
+            <div id="round-info">데이터 로딩 중...</div>
+        </div>
+
+        <div class="menu">
+            <button class="menu-btn" onclick="showGenerateNumbers()">
+                <div class="btn-icon">🎲</div>
+                <div class="btn-text">자동 번호 생성</div>
+                <div class="btn-desc">5개 세트</div>
+            </button>
+
+            <button class="menu-btn" onclick="showGenerateWithRequired()">
+                <div class="btn-icon">🎯</div>
+                <div class="btn-text">특정 번호 포함</div>
+                <div class="btn-desc">반자동 생성</div>
+            </button>
+
+            <button class="menu-btn" onclick="showFrequency()">
+                <div class="btn-icon">📊</div>
+                <div class="btn-text">빈도 분석</div>
+                <div class="btn-desc">추천 번호</div>
+            </button>
+
+            <button class="menu-btn" onclick="showAddDrawing()">
+                <div class="btn-icon">➕</div>
+                <div class="btn-text">회차 추가</div>
+                <div class="btn-desc">신규 데이터</div>
+            </button>
+        </div>
+
+        <div id="content" class="content"></div>
+    </div>
+
+    <script type="module" src="index.js"></script>
+</body>
+</html>
