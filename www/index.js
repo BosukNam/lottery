@@ -50,7 +50,7 @@ window.showGenerateNumbers = function() {
                     <div class="lottery-set">
                         <div class="lottery-set-header">세트 ${index + 1}</div>
                         <div class="lottery-numbers">
-                            ${numbers.map(num => `<div class="lottery-number">${num}</div>`).join('')}
+                            ${numbers.map(num => `<div class="lottery-number" style="background: ${getNumberColor(num)}; color: white;">${num}</div>`).join('')}
                         </div>
                     </div>
                 `;
@@ -119,14 +119,15 @@ window.generateWithRequired = function(event) {
                         <div class="lottery-numbers">
                             ${nums.map(num => {
                                 const isRequired = numbers.includes(num);
-                                return `<div class="lottery-number" style="${isRequired ? 'background: #ffd700; color: #333;' : ''}">${num}</div>`;
+                                const borderStyle = isRequired ? 'border: 3px solid white;' : '';
+                                return `<div class="lottery-number" style="background: ${getNumberColor(num)}; color: white; ${borderStyle}">${num}</div>`;
                             }).join('')}
                         </div>
                     </div>
                 `;
             });
 
-            html += '<div class="note">※ 금색 번호는 지정한 번호입니다<br>※ 기존 1등, 2등 당첨번호 제외</div>';
+            html += '<div class="note">※ 테두리 있는 번호는 지정한 번호입니다<br>※ 기존 1등, 2등 당첨번호 제외</div>';
 
             resultDiv.innerHTML = html;
         } catch (error) {
