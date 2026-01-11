@@ -4,7 +4,9 @@ let engine = null;
 
 async function loadLotteryData() {
     try {
-        const response = await fetch('lottery_data.json');
+        // 캐시 무효화를 위한 타임스탬프 추가 (Safari 대응)
+        const cacheBuster = `?t=${Date.now()}`;
+        const response = await fetch(`lottery_data.json${cacheBuster}`);
         const data = await response.json();
         return JSON.stringify(data);
     } catch (error) {
