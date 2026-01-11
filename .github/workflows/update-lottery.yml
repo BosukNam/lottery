@@ -1,0 +1,57 @@
+name: Update Lottery Data
+
+on:
+  # 매주 일요일 오전 9시 (KST) = 토요일 밤 24시 (UTC)
+  # 로또 추첨은 토요일 오후 8시 45분이므로 충분한 여유 확보
+  schedule:
+    - cron: '0 0 * * 0'  # UTC 일요일 00:00 = KST 일요일 09:00
+
+  # 수동 실행 가능
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run update script
+        id: update
+        run: |
+          python scripts/update_lottery_data.py
+          echo "updated=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # 최신 회차 번호 추출
+          LATEST_ROUND=$(python -c "import json; data=json.load(open('docs/lottery_data.json')); print(max(d['round'] for d in data))")
+
+          git add -A
+          git commit -m "data: ${LATEST_ROUND}회 당첨번호 자동 업데이트"
+          git push
