@@ -152,7 +152,7 @@ window.showFrequency = function() {
                     <div class="frequency-item">
                         <div style="display: flex; align-items: center; gap: 15px;">
                             <div style="font-weight: 600; color: #999; width: 30px;">#${index + 1}</div>
-                            <div class="frequency-number">${number}</div>
+                            <div class="frequency-number" style="background: ${getNumberColor(number)};">${number}</div>
                         </div>
                         <div class="frequency-count">출현: ${count}회</div>
                     </div>
