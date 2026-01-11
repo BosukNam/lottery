@@ -262,6 +262,53 @@ header h1 {
     font-size: 1.2rem;
 }
 
+/* 역대 당첨번호 조회 스타일 */
+.winning-info {
+    text-align: center;
+    padding: 30px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    margin-top: 20px;
+}
+
+.winning-round {
+    color: white;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 25px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+
+.winning-numbers-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.bonus-separator {
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 5px;
+}
+
+.bonus-number {
+    border: 3px solid white;
+}
+
+.bonus-label {
+    color: rgba(255,255,255,0.8);
+    font-size: 0.85rem;
+    margin-top: 15px;
+}
+
+.lottery-number {
+    color: white;
+    font-weight: 700;
+}
+
 @media (max-width: 600px) {
     header h1 {
         font-size: 2rem;
@@ -275,5 +322,13 @@ header h1 {
         width: 40px;
         height: 40px;
         font-size: 1rem;
+    }
+
+    .winning-round {
+        font-size: 1.1rem;
+    }
+
+    .bonus-separator {
+        font-size: 1.2rem;
     }
 }

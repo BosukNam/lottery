@@ -1,6 +1,7 @@
 import init, { LotteryEngine } from './pkg/lottery.js';
 
 let engine = null;
+let lotteryData = null;  // 역대 당첨번호 조회용
 
 async function loadLotteryData() {
     try {
@@ -19,6 +20,7 @@ async function initialize() {
     try {
         await init();
         const jsonData = await loadLotteryData();
+        lotteryData = JSON.parse(jsonData);  // 역대 당첨번호 조회용 저장
         engine = new LotteryEngine(jsonData);
 
         const roundRange = engine.getRoundRange();
@@ -166,157 +168,79 @@ window.showFrequency = function() {
     }, 300);
 };
 
-// SHA-256 해시된 관리자 비밀번호 (단방향 암호화)
-const ADMIN_PASSWORD_HASH = "02d55d9dd12267248bfb93fa3a1ab0cdd867aa24d8f32cddd185cd4a869408bb";
-
-// SHA-256 해시 함수
-async function sha256Hash(str) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hashHex;
+// 번호 색상 결정 함수
+function getNumberColor(num) {
+    if (num <= 10) return '#fbc400';      // 노랑
+    if (num <= 20) return '#69c8f2';      // 파랑
+    if (num <= 30) return '#ff7272';      // 빨강
+    if (num <= 40) return '#aaa';         // 회색
+    return '#b0d840';                      // 초록
 }
 
-// 비밀번호 확인 후 회차 추가 화면 표시
-window.showAddDrawingWithAuth = async function() {
+// 역대 당첨번호 조회
+window.showWinningNumbers = function() {
     const content = document.getElementById('content');
 
+    if (!lotteryData || lotteryData.length === 0) {
+        content.innerHTML = '<div class="error-message">데이터를 불러올 수 없습니다.</div>';
+        return;
+    }
+
+    // 최신 회차순으로 정렬
+    const sortedData = [...lotteryData].sort((a, b) => b.round - a.round);
+    const latestRound = sortedData[0].round;
+
+    // 회차 선택 옵션 생성
+    const options = sortedData.map(d =>
+        `<option value="${d.round}">${d.round}회</option>`
+    ).join('');
+
     content.innerHTML = `
-        <div class="result-title">🔒 관리자 인증</div>
+        <div class="result-title">🏆 역대 당첨번호 조회</div>
         <div class="form-group">
-            <label class="form-label">비밀번호를 입력하세요</label>
-            <input type="password"
-                   id="admin-password"
-                   class="form-input"
-                   placeholder="비밀번호"
-                   autocomplete="off">
+            <label class="form-label">회차 선택</label>
+            <select id="round-select" class="form-input" onchange="displayWinningNumber()">
+                ${options}
+            </select>
         </div>
-        <button onclick="verifyPassword()" class="submit-btn">확인</button>
-        <div id="auth-result"></div>
-        <div class="note" style="margin-top: 20px;">※ 관리자만 신규 회차를 추가할 수 있습니다</div>
+        <div id="winning-result"></div>
     `;
 
-    // Enter 키로도 확인 가능
-    document.getElementById('admin-password').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            verifyPassword();
-        }
-    });
+    // 최신 회차 당첨번호 표시
+    displayWinningNumber();
 };
 
-window.verifyPassword = async function() {
-    const passwordInput = document.getElementById('admin-password');
-    const password = passwordInput.value;
-    const resultDiv = document.getElementById('auth-result');
+// 선택된 회차의 당첨번호 표시
+window.displayWinningNumber = function() {
+    const round = parseInt(document.getElementById('round-select').value);
+    const resultDiv = document.getElementById('winning-result');
 
-    if (!password) {
-        resultDiv.innerHTML = '<div class="error-message">비밀번호를 입력해주세요.</div>';
+    const drawing = lotteryData.find(d => d.round === round);
+
+    if (!drawing) {
+        resultDiv.innerHTML = '<div class="error-message">해당 회차 정보를 찾을 수 없습니다.</div>';
         return;
     }
 
-    // 입력된 비밀번호를 SHA-256으로 해시하여 비교
-    const inputHash = await sha256Hash(password);
+    const numbersHtml = drawing.numbers.map(num =>
+        `<div class="lottery-number" style="background: ${getNumberColor(num)};">${num}</div>`
+    ).join('');
 
-    if (inputHash === ADMIN_PASSWORD_HASH) {
-        resultDiv.innerHTML = '<div class="success-message">인증 성공! 회차 추가 화면으로 이동합니다...</div>';
-        setTimeout(() => {
-            showAddDrawing();
-        }, 500);
-    } else {
-        resultDiv.innerHTML = '<div class="error-message">비밀번호가 올바르지 않습니다.</div>';
-        passwordInput.value = '';
-        passwordInput.focus();
-    }
-};
+    const bonusHtml = `<div class="lottery-number bonus-number" style="background: ${getNumberColor(drawing.bonus)};">${drawing.bonus}</div>`;
 
-window.showAddDrawing = function() {
-    const content = document.getElementById('content');
-    content.innerHTML = `
-        <div class="result-title">➕ 신규 회차 추가</div>
-        <form onsubmit="addDrawing(event)">
-            <div class="form-group">
-                <label class="form-label">회차</label>
-                <input type="number"
-                       id="round"
-                       class="form-input"
-                       placeholder="예: 1205"
-                       required>
+    resultDiv.innerHTML = `
+        <div class="winning-info">
+            <div class="winning-round">${round}회 당첨번호</div>
+            <div class="winning-numbers-container">
+                <div class="lottery-numbers">
+                    ${numbersHtml}
+                </div>
+                <div class="bonus-separator">+</div>
+                ${bonusHtml}
             </div>
-            <div class="form-group">
-                <label class="form-label">1등 번호 6개 (공백으로 구분)</label>
-                <input type="text"
-                       id="numbers"
-                       class="form-input"
-                       placeholder="예: 3 7 12 25 31 44"
-                       required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">보너스 번호</label>
-                <input type="number"
-                       id="bonus"
-                       class="form-input"
-                       placeholder="예: 15"
-                       min="1"
-                       max="45"
-                       required>
-            </div>
-            <button type="submit" class="submit-btn">회차 추가</button>
-        </form>
-        <div id="result"></div>
+            <div class="bonus-label">보너스</div>
+        </div>
     `;
-};
-
-window.addDrawing = function(event) {
-    event.preventDefault();
-
-    const round = parseInt(document.getElementById('round').value);
-    const numbersInput = document.getElementById('numbers').value;
-    const bonus = parseInt(document.getElementById('bonus').value);
-    const resultDiv = document.getElementById('result');
-
-    const numbers = numbersInput.trim().split(/\s+/).map(n => parseInt(n));
-
-    if (numbers.length !== 6) {
-        resultDiv.innerHTML = '<div class="error-message">6개의 번호를 입력해주세요.</div>';
-        return;
-    }
-
-    for (let num of numbers) {
-        if (isNaN(num) || num < 1 || num > 45) {
-            resultDiv.innerHTML = '<div class="error-message">1-45 사이의 숫자만 입력해주세요.</div>';
-            return;
-        }
-    }
-
-    try {
-        engine.addNewDrawing(round, numbers, bonus);
-
-        const roundRange = engine.getRoundRange();
-        const [minRound, maxRound, count] = roundRange;
-
-        document.getElementById('round-info').textContent =
-            `저장된 회차: ${minRound}회 ~ ${maxRound}회 (총 ${count}개)`;
-
-        resultDiv.innerHTML = `
-            <div class="success-message">
-                ${round}회차가 추가되었습니다!<br>
-                번호: ${numbers.join(', ')} + 보너스: ${bonus}
-            </div>
-        `;
-
-        // 폼 초기화
-        document.getElementById('round').value = '';
-        document.getElementById('numbers').value = '';
-        document.getElementById('bonus').value = '';
-
-        // LocalStorage에 저장
-        localStorage.setItem('lottery_data', engine.exportToJson());
-
-    } catch (error) {
-        resultDiv.innerHTML = `<div class="error-message">오류: ${error}</div>`;
-    }
 };
 
 // 초기화
