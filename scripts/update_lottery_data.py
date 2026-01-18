@@ -11,15 +11,35 @@ import time
 from pathlib import Path
 
 API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
+MAIN_PAGE_URL = "https://www.dhlottery.co.kr/gameResult.do?method=byWin"
 
 # 브라우저처럼 보이도록 헤더 설정 (동행복권 봇 차단 우회)
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+}
+
+# API 요청용 헤더 (JSON 요청)
+API_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     "Accept-Encoding": "gzip, deflate, br",
     "Referer": "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+    "X-Requested-With": "XMLHttpRequest",
     "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
 }
 
 # 프로젝트 루트 기준 lottery_data.json 파일 경로들
@@ -48,13 +68,43 @@ def save_lottery_data(filepath, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def fetch_lottery_result(round_no, max_retries=3):
+def create_session():
+    """세션 생성 및 메인 페이지 접속으로 쿠키 획득"""
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    print("[INFO] 동행복권 메인 페이지 접속 중...")
+    try:
+        # 메인 페이지 접속하여 세션 쿠키 획득
+        response = session.get(MAIN_PAGE_URL, timeout=15)
+        print(f"[DEBUG] 메인 페이지 상태 코드: {response.status_code}")
+
+        if response.status_code == 200:
+            print("[INFO] 세션 쿠키 획득 완료")
+            # 쿠키 정보 출력
+            cookies = session.cookies.get_dict()
+            if cookies:
+                print(f"[DEBUG] 획득한 쿠키: {list(cookies.keys())}")
+        else:
+            print(f"[WARN] 메인 페이지 접속 실패: HTTP {response.status_code}")
+
+        # 요청 간 짧은 대기
+        time.sleep(1)
+
+    except requests.RequestException as e:
+        print(f"[WARN] 메인 페이지 접속 실패: {e}")
+
+    return session
+
+
+def fetch_lottery_result(session, round_no, max_retries=3):
     """동행복권 API에서 특정 회차 당첨번호 조회 (재시도 로직 포함)"""
     url = API_URL.format(round_no)
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=15)
+            # API 요청용 헤더로 변경
+            response = session.get(url, headers=API_HEADERS, timeout=15)
 
             # 응답 상태 코드 확인
             print(f"[DEBUG] 회차 {round_no} - 상태 코드: {response.status_code}")
@@ -117,6 +167,21 @@ def fetch_lottery_result(round_no, max_retries=3):
     return None
 
 
+def verify_api_connection(session, test_round):
+    """API 연결 상태를 검증하기 위해 기존 회차 테스트"""
+    print(f"\n[INFO] API 연결 검증 중 (회차 {test_round} 테스트)...")
+
+    result = fetch_lottery_result(session, test_round)
+
+    if result is not None:
+        print(f"[INFO] API 연결 검증 성공: 회차 {result['round']} - {result['numbers']}")
+        return True
+    else:
+        print("[ERROR] API 연결 검증 실패: 기존 회차도 조회할 수 없습니다.")
+        print("[ERROR] 동행복권 사이트에서 봇 차단 중일 수 있습니다.")
+        return False
+
+
 def get_latest_round(data):
     """현재 데이터에서 최신 회차 번호 반환"""
     if not data:
@@ -140,13 +205,23 @@ def update_lottery_data():
     latest_round = get_latest_round(data)
     print(f"현재 최신 회차: {latest_round}")
 
+    # 세션 생성 (쿠키 획득)
+    session = create_session()
+
+    # API 연결 검증 (기존 회차 테스트)
+    if not verify_api_connection(session, latest_round):
+        print("\n[WARN] API 검증 실패. 그래도 새 회차 조회를 시도합니다...")
+
     # 새로운 회차 확인 및 추가
     new_rounds_added = 0
     next_round = latest_round + 1
 
+    # 요청 간 대기
+    time.sleep(1)
+
     while True:
-        print(f"회차 {next_round} 조회 중...")
-        result = fetch_lottery_result(next_round)
+        print(f"\n회차 {next_round} 조회 중...")
+        result = fetch_lottery_result(session, next_round)
 
         if result is None:
             print(f"회차 {next_round}은 아직 추첨되지 않았거나 조회할 수 없습니다.")
@@ -157,8 +232,11 @@ def update_lottery_data():
         print(f"회차 {next_round} 추가됨: {result['numbers']} + 보너스 {result['bonus']}")
         next_round += 1
 
+        # 연속 요청 시 짧은 대기
+        time.sleep(0.5)
+
     if new_rounds_added == 0:
-        print("새로운 회차가 없습니다. 데이터가 최신 상태입니다.")
+        print("\n새로운 회차가 없습니다. 데이터가 최신 상태입니다.")
         return False
 
     # 회차 순으로 정렬
