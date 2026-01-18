@@ -7,10 +7,15 @@ API 엔드포인트: https://www.dhlottery.co.kr/common.do?method=getLottoNumber
 
 import json
 import requests
-import os
+import time
 from pathlib import Path
 
 API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
+
+# 브라우저처럼 보이도록 User-Agent 설정
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+}
 
 # 프로젝트 루트 기준 lottery_data.json 파일 경로들
 DATA_FILES = [
@@ -38,33 +43,48 @@ def save_lottery_data(filepath, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def fetch_lottery_result(round_no):
-    """동행복권 API에서 특정 회차 당첨번호 조회"""
+def fetch_lottery_result(round_no, max_retries=3):
+    """동행복권 API에서 특정 회차 당첨번호 조회 (재시도 로직 포함)"""
     url = API_URL.format(round_no)
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
 
-        if data.get("returnValue") != "success":
-            return None
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=10)
+            response.raise_for_status()
 
-        # API 응답을 프로젝트 형식으로 변환
-        return {
-            "round": data["drwNo"],
-            "numbers": sorted([
-                data["drwtNo1"],
-                data["drwtNo2"],
-                data["drwtNo3"],
-                data["drwtNo4"],
-                data["drwtNo5"],
-                data["drwtNo6"],
-            ]),
-            "bonus": data["bnusNo"],
-        }
-    except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
-        print(f"회차 {round_no} 조회 실패: {e}")
-        return None
+            # 응답이 비어있는지 확인
+            if not response.text or not response.text.strip():
+                raise ValueError("빈 응답을 받았습니다")
+
+            data = response.json()
+
+            if data.get("returnValue") != "success":
+                return None
+
+            # API 응답을 프로젝트 형식으로 변환
+            return {
+                "round": data["drwNo"],
+                "numbers": sorted([
+                    data["drwtNo1"],
+                    data["drwtNo2"],
+                    data["drwtNo3"],
+                    data["drwtNo4"],
+                    data["drwtNo5"],
+                    data["drwtNo6"],
+                ]),
+                "bonus": data["bnusNo"],
+            }
+        except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError) as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** (attempt + 1)  # 2, 4초 대기
+                print(f"회차 {round_no} 조회 실패 (시도 {attempt + 1}/{max_retries}): {e}")
+                print(f"{wait_time}초 후 재시도...")
+                time.sleep(wait_time)
+            else:
+                print(f"회차 {round_no} 조회 실패: {e}")
+                return None
+
+    return None
 
 
 def get_latest_round(data):
