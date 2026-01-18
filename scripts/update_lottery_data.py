@@ -127,5 +127,6 @@ def update_lottery_data():
 
 
 if __name__ == "__main__":
-    updated = update_lottery_data()
-    exit(0 if updated else 1)
+    update_lottery_data()
+    # 새로운 회차가 없어도 정상 종료 (데이터가 최신 상태이므로 에러가 아님)
+    exit(0)

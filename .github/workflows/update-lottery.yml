@@ -1,10 +1,10 @@
 name: Update Lottery Data
 
 on:
-  # 매주 일요일 오전 9시 (KST) = 토요일 밤 24시 (UTC)
+  # 매주 한국시간 일요일 0시 0분에 실행
   # 로또 추첨은 토요일 오후 8시 45분이므로 충분한 여유 확보
   schedule:
-    - cron: '0 0 * * 0'  # UTC 일요일 00:00 = KST 일요일 09:00
+    - cron: '0 15 * * 6'  # UTC 토요일 15:00 = KST 일요일 00:00
 
   # 수동 실행 가능
   workflow_dispatch:
