@@ -12,6 +12,11 @@ from pathlib import Path
 
 API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
 
+# 브라우저처럼 보이도록 User-Agent 설정
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+}
+
 # 프로젝트 루트 기준 lottery_data.json 파일 경로들
 DATA_FILES = [
     "docs/lottery_data.json",
@@ -44,8 +49,13 @@ def fetch_lottery_result(round_no, max_retries=3):
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=HEADERS, timeout=10)
             response.raise_for_status()
+
+            # 응답이 비어있는지 확인
+            if not response.text or not response.text.strip():
+                raise ValueError("빈 응답을 받았습니다")
+
             data = response.json()
 
             if data.get("returnValue") != "success":
@@ -64,7 +74,7 @@ def fetch_lottery_result(round_no, max_retries=3):
                 ]),
                 "bonus": data["bnusNo"],
             }
-        except (requests.RequestException, json.JSONDecodeError, KeyError) as e:
+        except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError) as e:
             if attempt < max_retries - 1:
                 wait_time = 2 ** (attempt + 1)  # 2, 4초 대기
                 print(f"회차 {round_no} 조회 실패 (시도 {attempt + 1}/{max_retries}): {e}")
