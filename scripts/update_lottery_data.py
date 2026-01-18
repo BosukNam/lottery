@@ -12,9 +12,14 @@ from pathlib import Path
 
 API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
 
-# 브라우저처럼 보이도록 User-Agent 설정
+# 브라우저처럼 보이도록 헤더 설정 (동행복권 봇 차단 우회)
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+    "Connection": "keep-alive",
 }
 
 # 프로젝트 루트 기준 lottery_data.json 파일 경로들
@@ -49,16 +54,41 @@ def fetch_lottery_result(round_no, max_retries=3):
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=10)
+            response = requests.get(url, headers=HEADERS, timeout=15)
+
+            # 응답 상태 코드 확인
+            print(f"[DEBUG] 회차 {round_no} - 상태 코드: {response.status_code}")
+
+            # 403, 503 등 서버 오류 시 재시도
+            if response.status_code in (403, 429, 500, 502, 503, 504):
+                raise requests.RequestException(f"서버 오류: HTTP {response.status_code}")
+
             response.raise_for_status()
 
             # 응답이 비어있는지 확인
-            if not response.text or not response.text.strip():
+            response_text = response.text.strip()
+            if not response_text:
                 raise ValueError("빈 응답을 받았습니다")
+
+            # Content-Type 확인 및 디버깅
+            content_type = response.headers.get("Content-Type", "")
+            print(f"[DEBUG] 회차 {round_no} - Content-Type: {content_type}")
+
+            # JSON이 아닌 응답 감지 (HTML 오류 페이지 등)
+            if "text/html" in content_type.lower():
+                print(f"[DEBUG] HTML 응답 감지 - 첫 200자: {response_text[:200]}")
+                raise ValueError("API가 HTML을 반환했습니다 (봇 차단 또는 서버 오류)")
+
+            # JSON 형식인지 기본 검사
+            if not response_text.startswith("{"):
+                print(f"[DEBUG] 비정상 응답 - 첫 200자: {response_text[:200]}")
+                raise ValueError(f"JSON이 아닌 응답: {response_text[:100]}")
 
             data = response.json()
 
             if data.get("returnValue") != "success":
+                # 추첨되지 않은 회차는 정상적인 경우
+                print(f"[DEBUG] 회차 {round_no} - returnValue: {data.get('returnValue')}")
                 return None
 
             # API 응답을 프로젝트 형식으로 변환
