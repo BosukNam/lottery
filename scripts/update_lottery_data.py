@@ -2,28 +2,12 @@
 """
 동행복권 API를 통해 로또 당첨번호를 자동으로 업데이트하는 스크립트
 
-API 엔드포인트: https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={회차}
+Playwright를 사용하여 실제 브라우저로 봇 차단 우회
 """
 
 import json
 import time
 from pathlib import Path
-
-# cloudscraper를 사용하여 CloudFlare 봇 차단 우회
-try:
-    import cloudscraper
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True
-        }
-    )
-    print("[INFO] cloudscraper 사용")
-except ImportError:
-    import requests
-    scraper = requests.Session()
-    print("[WARN] cloudscraper 없음, requests 사용")
 
 API_URL = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
 
@@ -53,48 +37,96 @@ def save_lottery_data(filepath, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def fetch_lottery_result(round_no, max_retries=3):
-    """동행복권 API에서 특정 회차 당첨번호 조회 (재시도 로직 포함)"""
-    url = API_URL.format(round_no)
+def fetch_with_playwright(round_no):
+    """Playwright를 사용하여 API 호출 (봇 차단 우회)"""
+    try:
+        from playwright.sync_api import sync_playwright
 
-    for attempt in range(max_retries):
-        try:
-            response = scraper.get(url, timeout=15)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
+            page = context.new_page()
 
-            # 응답 상태 코드 확인
-            print(f"[DEBUG] 회차 {round_no} - 상태 코드: {response.status_code}")
+            url = API_URL.format(round_no)
+            print(f"[Playwright] {url} 접속 중...")
 
-            # 403, 503 등 서버 오류 시 재시도
-            if response.status_code in (403, 429, 500, 502, 503, 504):
-                raise Exception(f"서버 오류: HTTP {response.status_code}")
+            response = page.goto(url, wait_until="networkidle", timeout=30000)
+            content = page.content()
 
-            # 응답이 비어있는지 확인
-            response_text = response.text.strip()
-            if not response_text:
-                raise ValueError("빈 응답을 받았습니다")
+            browser.close()
 
-            # Content-Type 확인 및 디버깅
-            content_type = response.headers.get("Content-Type", "")
-            print(f"[DEBUG] 회차 {round_no} - Content-Type: {content_type}")
-
-            # JSON이 아닌 응답 감지 (HTML 오류 페이지 등)
-            if "text/html" in content_type.lower():
-                print(f"[DEBUG] HTML 응답 감지 - 첫 200자: {response_text[:200]}")
-                raise ValueError("API가 HTML을 반환했습니다 (봇 차단 또는 서버 오류)")
-
-            # JSON 형식인지 기본 검사
-            if not response_text.startswith("{"):
-                print(f"[DEBUG] 비정상 응답 - 첫 200자: {response_text[:200]}")
-                raise ValueError(f"JSON이 아닌 응답: {response_text[:100]}")
-
-            data = response.json()
-
-            if data.get("returnValue") != "success":
-                # 추첨되지 않은 회차는 정상적인 경우
-                print(f"[DEBUG] 회차 {round_no} - returnValue: {data.get('returnValue')}")
+            # JSON 응답 추출
+            if content.startswith("<!DOCTYPE") or content.startswith("<html"):
+                # HTML 페이지인 경우 body 내용에서 JSON 추출 시도
+                try:
+                    # pre 태그 안의 JSON 찾기
+                    import re
+                    json_match = re.search(r'\{[^{}]*"returnValue"[^{}]*\}', content)
+                    if json_match:
+                        return json.loads(json_match.group())
+                except:
+                    pass
+                print(f"[Playwright] HTML 응답 - 첫 200자: {content[:200]}")
                 return None
 
-            # API 응답을 프로젝트 형식으로 변환
+            return json.loads(content)
+
+    except ImportError:
+        print("[ERROR] Playwright가 설치되지 않았습니다.")
+        return None
+    except Exception as e:
+        print(f"[Playwright] 오류: {e}")
+        return None
+
+
+def fetch_with_requests(round_no):
+    """requests를 사용한 기본 API 호출"""
+    try:
+        import requests
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Referer": "https://www.dhlottery.co.kr/gameResult.do?method=byWin",
+        }
+
+        url = API_URL.format(round_no)
+        response = requests.get(url, headers=headers, timeout=15)
+
+        print(f"[requests] 상태 코드: {response.status_code}")
+        print(f"[requests] Content-Type: {response.headers.get('Content-Type', '')}")
+
+        if "application/json" in response.headers.get("Content-Type", ""):
+            return response.json()
+
+        # JSON으로 파싱 시도
+        try:
+            return response.json()
+        except:
+            print(f"[requests] HTML 응답 감지")
+            return None
+
+    except Exception as e:
+        print(f"[requests] 오류: {e}")
+        return None
+
+
+def fetch_lottery_result(round_no, max_retries=3):
+    """동행복권 API에서 특정 회차 당첨번호 조회"""
+
+    for attempt in range(max_retries):
+        # 먼저 Playwright 시도
+        print(f"\n[시도 {attempt + 1}/{max_retries}] 회차 {round_no} 조회...")
+
+        data = fetch_with_playwright(round_no)
+
+        if data is None:
+            # Playwright 실패 시 requests로 폴백
+            data = fetch_with_requests(round_no)
+
+        if data and data.get("returnValue") == "success":
             return {
                 "round": data["drwNo"],
                 "numbers": sorted([
@@ -107,32 +139,16 @@ def fetch_lottery_result(round_no, max_retries=3):
                 ]),
                 "bonus": data["bnusNo"],
             }
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = 2 ** (attempt + 1)  # 2, 4초 대기
-                print(f"회차 {round_no} 조회 실패 (시도 {attempt + 1}/{max_retries}): {e}")
-                print(f"{wait_time}초 후 재시도...")
-                time.sleep(wait_time)
-            else:
-                print(f"회차 {round_no} 조회 실패: {e}")
-                return None
+        elif data and data.get("returnValue") == "fail":
+            print(f"[DEBUG] 회차 {round_no} - returnValue: fail (추첨 전)")
+            return None
+
+        if attempt < max_retries - 1:
+            wait_time = 2 ** (attempt + 1)
+            print(f"{wait_time}초 후 재시도...")
+            time.sleep(wait_time)
 
     return None
-
-
-def verify_api_connection(test_round):
-    """API 연결 상태를 검증하기 위해 기존 회차 테스트"""
-    print(f"\n[INFO] API 연결 검증 중 (회차 {test_round} 테스트)...")
-
-    result = fetch_lottery_result(test_round)
-
-    if result is not None:
-        print(f"[INFO] API 연결 검증 성공: 회차 {result['round']} - {result['numbers']}")
-        return True
-    else:
-        print("[ERROR] API 연결 검증 실패: 기존 회차도 조회할 수 없습니다.")
-        print("[ERROR] 동행복권 사이트에서 봇 차단 중일 수 있습니다.")
-        return False
 
 
 def get_latest_round(data):
@@ -159,14 +175,18 @@ def update_lottery_data():
     print(f"현재 최신 회차: {latest_round}")
 
     # API 연결 검증 (기존 회차 테스트)
-    if not verify_api_connection(latest_round):
-        print("\n[WARN] API 검증 실패. 그래도 새 회차 조회를 시도합니다...")
+    print(f"\n[INFO] API 연결 검증 중 (회차 {latest_round} 테스트)...")
+    test_result = fetch_lottery_result(latest_round, max_retries=2)
+
+    if test_result:
+        print(f"[INFO] API 연결 검증 성공: {test_result['numbers']}")
+    else:
+        print("[WARN] API 검증 실패. 새 회차 조회를 시도합니다...")
 
     # 새로운 회차 확인 및 추가
     new_rounds_added = 0
     next_round = latest_round + 1
 
-    # 요청 간 대기
     time.sleep(1)
 
     while True:
@@ -182,7 +202,6 @@ def update_lottery_data():
         print(f"회차 {next_round} 추가됨: {result['numbers']} + 보너스 {result['bonus']}")
         next_round += 1
 
-        # 연속 요청 시 짧은 대기
         time.sleep(0.5)
 
     if new_rounds_added == 0:
@@ -206,5 +225,4 @@ def update_lottery_data():
 
 if __name__ == "__main__":
     update_lottery_data()
-    # 새로운 회차가 없어도 정상 종료 (데이터가 최신 상태이므로 에러가 아님)
     exit(0)
