@@ -418,13 +418,37 @@ window.showSmartRecommend = function () {
     const content = document.getElementById('content');
     content.innerHTML = `
         <div class="result-title">🧠 통계 추천</div>
+        <div class="seed-info">
+            <strong>시드(Seed)란?</strong><br>
+            난수 생성기의 시작값입니다. <b>같은 시드 = 항상 똑같은 추천 10개</b>가 나오고,
+            시드를 바꾸면 완전히 다른 10개 조합이 나옵니다.
+            (필터·점수 기준은 동일하게 적용되므로 어떤 시드든 통계적 품질은 같습니다.)<br><br>
+            <b>범위:</b> 0 ~ 4,294,967,295 (정수)<br>
+            <b>추천 사용법:</b>
+            <ul>
+                <li>마음에 드는 추천이 나오면 시드를 메모해두면 같은 결과 재현 가능</li>
+                <li>여러 시드로 돌려보고 직관적으로 끌리는 조합을 고르기</li>
+                <li>"랜덤 시드" 버튼으로 매번 다른 시드 자동 생성</li>
+            </ul>
+        </div>
         <div class="form-group">
-            <label class="form-label">시드 (다른 추천을 보고 싶으면 변경)</label>
-            <input type="number" id="smart-seed" class="form-input" value="42">
+            <label class="form-label">시드 값</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="number" id="smart-seed" class="form-input"
+                       value="42" min="0" max="4294967295" step="1"
+                       style="flex: 1;">
+                <button type="button" class="seed-random-btn" onclick="randomSeed()">🎲 랜덤</button>
+            </div>
+            <div class="form-hint">예: 42, 1221, 20260427 등 아무 정수나 가능</div>
         </div>
         <button class="submit-btn" onclick="runSmartRecommend()">10개 조합 생성</button>
         <div id="smart-result"></div>
     `;
+};
+
+window.randomSeed = function () {
+    const seed = Math.floor(Math.random() * 4294967296);
+    document.getElementById('smart-seed').value = seed;
 };
 
 window.runSmartRecommend = function () {
@@ -433,7 +457,11 @@ window.runSmartRecommend = function () {
 
     setTimeout(() => {
         try {
-            const seed = parseInt(document.getElementById('smart-seed').value) || 42;
+            let seed = parseInt(document.getElementById('smart-seed').value);
+            if (isNaN(seed) || seed < 0 || seed > 4294967295) {
+                resultDiv.innerHTML = '<div class="error-message">시드는 0 ~ 4,294,967,295 사이의 정수여야 합니다.</div>';
+                return;
+            }
             const stats = buildSmartStats(lotteryData);
             const rand = makeRng(seed);
 

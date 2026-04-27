@@ -237,6 +237,50 @@ header h1 {
     border-top: 1px solid #e0e0e0;
 }
 
+.seed-info {
+    background: #f8f9ff;
+    border-left: 4px solid #667eea;
+    padding: 15px 18px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+    color: #444;
+    line-height: 1.6;
+}
+
+.seed-info ul {
+    margin: 6px 0 0 20px;
+    padding: 0;
+}
+
+.seed-info li {
+    margin-bottom: 3px;
+}
+
+.seed-random-btn {
+    padding: 0 16px;
+    background: white;
+    border: 2px solid #667eea;
+    color: #667eea;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.seed-random-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 6px;
+}
+
 .error-message {
     background: #ffebee;
     color: #c62828;
