@@ -93,12 +93,12 @@ def sample_combo(rng):
     weights = [score_num[n] + 0.05 for n in nums]  # 0 가중치 방지
     return tuple(sorted(rng.sample(nums, 6)))  # 균등 샘플링 fallback
 
-def weighted_sample_combo(rng):
+def weighted_sample_combo(rng, temperature=0.5):
+    """temperature: 0=균등, 1=원래 가중, <1이면 평탄화하여 다양성 증가"""
     pool = list(range(1, 46))
-    weights = [score_num[n] + 0.05 for n in pool]
+    weights = [(score_num[n] + 0.05) ** temperature for n in pool]
     chosen = set()
     while len(chosen) < 6:
-        # 가중 추첨
         n = rng.choices(pool, weights=weights, k=1)[0]
         chosen.add(n)
     return tuple(sorted(chosen))
@@ -111,26 +111,69 @@ def total_score(combo):
     pair_s = pair_score(combo) / max_pair_avg     # 0~1 근사
     return num_s * 0.6 + pair_s * 0.4
 
+def diverse_select(cands, target, max_per_number=4, lambda_div=0.15):
+    """
+    MMR-style 다양성 선택:
+      adjusted = total_score - lambda * (해당 조합 번호들이 이미 사용된 횟수 합)
+    + 단일 번호의 등장 횟수가 max_per_number를 넘으면 후보 제외
+    """
+    selected = []
+    usage = Counter()
+    remaining = list(cands)
+    while remaining and len(selected) < target:
+        best, best_score, best_idx = None, -1e9, -1
+        for idx, c in enumerate(remaining):
+            if any(usage[n] >= max_per_number for n in c):
+                continue
+            base = total_score(c)
+            penalty = lambda_div * sum(usage[n] for n in c)
+            adj = base - penalty
+            if adj > best_score:
+                best_score = adj
+                best = c
+                best_idx = idx
+        if best is None:
+            # 모든 후보가 캡에 걸린 경우 — 캡을 풀고 한 번 더 시도
+            for idx, c in enumerate(remaining):
+                base = total_score(c)
+                penalty = lambda_div * sum(usage[n] for n in c)
+                adj = base - penalty
+                if adj > best_score:
+                    best_score = adj
+                    best = c
+                    best_idx = idx
+            if best is None:
+                break
+        selected.append(best)
+        for n in best:
+            usage[n] += 1
+        remaining.pop(best_idx)
+    return selected, usage
+
 # ---- 메인 ----
-def main(target=10, attempts=200000, seed=42):
+def main(target=10, attempts=300000, seed=42, temperature=0.5,
+         max_per_number=4, lambda_div=0.15):
     rng = random.Random(seed)
     seen = set()
     cands = []
     tried = 0
-    while tried < attempts and len(cands) < 5000:
+    while tried < attempts and len(cands) < 8000:
         tried += 1
-        combo = weighted_sample_combo(rng)
+        combo = weighted_sample_combo(rng, temperature=temperature)
         if combo in seen:
             continue
         seen.add(combo)
         if not passes_filters(combo):
             continue
-        if combo in past_sets:  # 과거 당첨 조합과 중복 → 제외
+        if combo in past_sets:
             continue
         cands.append(combo)
 
     cands.sort(key=lambda c: total_score(c), reverse=True)
-    top = cands[:target]
+    pool = cands[:1500]  # 다양성 선택은 상위 1500개 풀에서
+    top, usage = diverse_select(pool, target,
+                                max_per_number=max_per_number,
+                                lambda_div=lambda_div)
 
     print(f"=== 후보 생성 시도: {tried}, 필터 통과: {len(cands)}, 추천: {len(top)} ===")
     print(f"[1221회 당첨번호] {sorted(LAST['numbers'])} + 보너스 {LAST['bonus']}\n")
@@ -147,8 +190,13 @@ def main(target=10, attempts=200000, seed=42):
             f"{f'{low}:{6-low}':<8}{consec:<6}{sc:.3f}"
         )
 
+    # 다양성 통계
+    print(f"\n[다양성 통계] 사용된 고유 번호: {len(usage)}/45")
+    used_sorted = sorted(usage.items(), key=lambda x: -x[1])
+    print("  번호별 등장: " + ", ".join(f"{n}({c})" for n, c in used_sorted))
+
     # 과거 중복 검사 결과 요약
-    print(f"\n[과거 회차 데이터 중복 검사] 1221회차 전체 정렬조합과 비교 → 추천 10개 모두 0 매치")
+    print(f"\n[과거 회차 데이터 중복 검사] 1221회차 전체 정렬조합과 비교 → 추천 {len(top)}개 모두 0 매치")
 
     # 추천 조합이 과거 어느 회차와 가장 비슷한지(공통 5개) 참고로 표시
     print("\n[참고: 추천 조합과 가장 유사한 과거 회차 (공통 5개 이상)]")
